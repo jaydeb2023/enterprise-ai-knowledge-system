@@ -1,6 +1,4 @@
-// frontend/src/api/chat.js
-
-const API_BASE = import.meta.env.VITE_API_URL;
+const API_BASE = "https://enterprise-ai-knowledge-system-production.up.railway.app";
 
 export async function askAI(question) {
   if (!question || question.trim() === "") {
@@ -12,9 +10,7 @@ export async function askAI(question) {
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      query: question.trim(),
-    }),
+    body: JSON.stringify({ query: question.trim() }),
   });
 
   if (!response.ok) {

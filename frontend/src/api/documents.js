@@ -1,12 +1,6 @@
-// frontend/src/api/documents.js
-
-const API_BASE = import.meta.env.VITE_API_URL;
+const API_BASE = "https://enterprise-ai-knowledge-system-production.up.railway.app";
 
 export async function uploadDocument(file) {
-  if (!file) {
-    throw new Error("No file selected");
-  }
-
   const formData = new FormData();
   formData.append("file", file);
 
