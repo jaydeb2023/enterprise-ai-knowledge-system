@@ -6,14 +6,15 @@ import os
 import logging
 
 from app.db.session import SessionLocal
-from app.services.ingest_service import ingest_document
 
-# IMPORTANT:
-# ❌ NO prefix here
-# ✅ Prefix is applied in main.py
+# ==============================
+# ROUTER (NO PREFIX HERE)
+# ==============================
 router = APIRouter(tags=["documents"])
 
-# Supported extensions
+# ==============================
+# CONFIG
+# ==============================
 ALLOWED_EXTENSIONS = {
     ".txt", ".md", ".csv",
     ".pdf",
@@ -27,7 +28,9 @@ ALLOWED_EXTENSIONS = {
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-
+# ==============================
+# DB DEPENDENCY
+# ==============================
 def get_db():
     db = SessionLocal()
     try:
@@ -35,86 +38,77 @@ def get_db():
     finally:
         db.close()
 
-
+# ==============================
+# TEXT EXTRACTION (SAFE)
+# ==============================
 def extract_text_with_unstructured(file_path: str, filename: str) -> str:
     try:
         from unstructured.partition.auto import partition
 
         elements = partition(filename=file_path, strategy="auto")
 
-        text_parts = []
-        for element in elements:
-            if element.text:
-                text_parts.append(element.text.strip())
+        texts = []
+        for el in elements:
+            if el.text:
+                texts.append(el.text.strip())
 
-        return "\n\n".join([p for p in text_parts if p])
+        return "\n\n".join(texts)
 
     except Exception as e:
-        logger.error(f"Error extracting text from {filename}: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to process file")
+        logger.error(f"Extraction failed for {filename}: {e}")
+        raise HTTPException(status_code=500, detail="Text extraction failed")
 
-
-# =====================================================
-# ✅ REQUIRED FOR MOBILE BROWSERS (VERY IMPORTANT)
-# =====================================================
+# ==============================
+# REQUIRED FOR MOBILE (OPTIONS)
+# ==============================
 @router.options("/upload")
 async def upload_options():
     return {}
 
-
-# =====================================================
-# ✅ UPLOAD ENDPOINT
-# URL WILL BE: /documents/upload
-# =====================================================
+# ==============================
+# UPLOAD ENDPOINT
+# URL: /documents/upload
+# ==============================
 @router.post("/upload")
 async def upload_document(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
-    file_ext = os.path.splitext(file.filename)[1].lower()
-    if file_ext not in ALLOWED_EXTENSIONS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"File type {file_ext} not supported"
-        )
+    # Validate extension
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="Unsupported file type")
 
-    MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
+    # Read file
     content = await file.read()
-    if len(content) > MAX_FILE_SIZE:
-        raise HTTPException(status_code=400, detail="File too large")
+    if len(content) > 50 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File too large (max 50MB)")
 
     tmp_path = None
     try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp_file:
-            tmp_file.write(content)
-            tmp_path = tmp_file.name
+        # Save temp file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
 
-        logger.info(f"Processing file: {file.filename}")
         text = extract_text_with_unstructured(tmp_path, file.filename)
 
         if not text.strip():
             raise HTTPException(status_code=400, detail="No text extracted")
 
-        result = ingest_document(
-            db=db,
-            filename=file.filename,
-            content=text
-        )
-
+        # 🚨 TEMPORARY RESPONSE (NO INGEST)
         return JSONResponse({
-            "message": "Document uploaded and indexed successfully",
+            "message": "Upload OK (public test mode)",
             "filename": file.filename,
-            "document_id": result.get("document_id"),
-            "chunks_indexed": result.get("chunks_indexed"),
-            "extracted_text_length": len(text)
+            "text_length": len(text)
         })
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Upload error: {str(e)}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        logger.error(f"Upload error: {e}")
+        raise HTTPException(status_code=500, detail="Upload failed")
     finally:
         if tmp_path and os.path.exists(tmp_path):
             try:
