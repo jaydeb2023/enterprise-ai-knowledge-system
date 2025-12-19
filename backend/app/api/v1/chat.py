@@ -10,13 +10,12 @@ router = APIRouter(tags=["chat"])
 logger = logging.getLogger(__name__)
 
 # -------------------------
-# CLIENTS (SAFE AT IMPORT)
+# SAFE AT IMPORT
 # -------------------------
 vector_store = VectorStore(collection_name="enterprise_knowledge")
-groq_client = Groq(api_key=settings.GROQ_API_KEY)
 
 # -------------------------
-# LAZY EMBEDDER (CRITICAL FIX)
+# LAZY EMBEDDER
 # -------------------------
 _embedder = None
 
@@ -27,14 +26,24 @@ def get_embedder():
     return _embedder
 
 # -------------------------
+# LAZY GROQ CLIENT (CRITICAL FIX)
+# -------------------------
+_groq_client = None
+
+def get_groq_client():
+    global _groq_client
+    if _groq_client is None:
+        if not settings.GROQ_API_KEY:
+            raise RuntimeError("GROQ_API_KEY is not set")
+        _groq_client = Groq(api_key=settings.GROQ_API_KEY)
+    return _groq_client
+
+# -------------------------
 # TEST ENDPOINT
 # -------------------------
 @router.get("/test")
 async def chat_test():
-    return {
-        "status": "chat endpoint is live",
-        "model": "all-MiniLM-L6-v2"
-    }
+    return {"chat_service": "ok"}
 
 # -------------------------
 # REQUEST MODEL
@@ -52,27 +61,23 @@ async def chat(request: ChatRequest):
 
     try:
         embedder = get_embedder()
+        groq_client = get_groq_client()
 
         query_embedding = embedder.encode(request.query).tolist()
-
-        search_results = vector_store.search(query_embedding, limit=5)
+        results = vector_store.search(query_embedding, limit=5)
 
         context_parts = []
-        for result in search_results:
-            payload = result.payload or {}
+        for r in results:
+            payload = r.payload or {}
             text = payload.get("text", "")
             if text:
                 context_parts.append(text)
 
-        context = "\n\n".join(context_parts)
-        if not context:
-            context = "No relevant documents found in the uploaded documents."
+        context = "\n\n".join(context_parts) or "No relevant documents found."
 
         prompt = f"""
-You are an expert assistant for Enterprise Knowledge.
-
-Use only the following context to answer the question.
-If the answer is not in the context, say you do not know.
+Use ONLY the context below to answer.
+If the answer is not present, say you do not know.
 
 Context:
 {context}
@@ -89,8 +94,7 @@ Answer:
             temperature=0.3,
         )
 
-        answer = completion.choices[0].message.content.strip()
-        return {"answer": answer}
+        return {"answer": completion.choices[0].message.content.strip()}
 
     except Exception as e:
         logger.exception("Chat error")
