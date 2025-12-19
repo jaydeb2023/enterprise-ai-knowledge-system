@@ -1,52 +1,40 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-# Create FastAPI app
+# =========================
+# APP
+# =========================
 app = FastAPI(
     title="Enterprise AI Knowledge System",
     version="1.0.0"
 )
 
-# =====================================================
-# CORS CONFIG (PUBLIC / MOBILE SAFE)
-# =====================================================
+# =========================
+# CORS (PUBLIC / MOBILE SAFE)
+# =========================
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],        # allow everyone (public demo)
-    allow_credentials=False,    # MUST be False when using "*"
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# =====================================================
-# ROOT ROUTE
-# =====================================================
+# =========================
+# ROOT
+# =========================
 @app.get("/")
 async def root():
-    return {
-        "status": "ok",
-        "service": "enterprise-ai-knowledge-system"
-    }
+    return {"status": "ok"}
 
-# =====================================================
-# HEALTH CHECK (OPTIONAL BUT GOOD)
-# =====================================================
-@app.get("/health")
-async def health():
-    return {
-        "status": "ok"
-    }
-
-# =====================================================
-# DOCUMENT ROUTES (UPLOAD / INDEX)
-# =====================================================
+# =========================
+# IMPORT ROUTERS
+# =========================
+from app.api.v1.health import router as health_router
 from app.api.v1.documents import router as documents_router
 
-# IMPORTANT:
-# Frontend calls: /documents/upload
-# So prefix MUST be "/documents"
-app.include_router(
-    documents_router,
-    prefix="/documents",
-    tags=["documents"]
-)
+# =========================
+# INCLUDE ROUTERS
+# =========================
+app.include_router(health_router)
+app.include_router(documents_router, prefix="/documents")
