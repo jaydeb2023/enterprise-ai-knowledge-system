@@ -13,12 +13,18 @@ router = APIRouter(
 logger = logging.getLogger(__name__)
 
 # -------------------------
-# SAFE AT IMPORT
+# LAZY VECTOR STORE (FIX)
 # -------------------------
-vector_store = VectorStore(collection_name="enterprise_knowledge")
+_vector_store = None
+
+def get_vector_store():
+    global _vector_store
+    if _vector_store is None:
+        _vector_store = VectorStore(collection_name="enterprise_knowledge")
+    return _vector_store
 
 # -------------------------
-# GROQ CLIENT (LAZY)
+# LAZY GROQ CLIENT
 # -------------------------
 _groq_client = None
 
@@ -31,7 +37,7 @@ def get_groq_client():
     return _groq_client
 
 # -------------------------
-# EMBEDDING USING GROQ
+# EMBEDDINGS
 # -------------------------
 def embed_text(text: str) -> list[float]:
     client = get_groq_client()
@@ -42,20 +48,20 @@ def embed_text(text: str) -> list[float]:
     return response.data[0].embedding
 
 # -------------------------
-# TEST ENDPOINT
+# TEST
 # -------------------------
 @router.get("/test")
 async def chat_test():
     return {"chat_service": "ok"}
 
 # -------------------------
-# REQUEST MODEL
+# REQUEST
 # -------------------------
 class ChatRequest(BaseModel):
     query: str
 
 # -------------------------
-# CHAT ENDPOINT
+# CHAT
 # -------------------------
 @router.post("")
 async def chat(request: ChatRequest):
@@ -63,17 +69,16 @@ async def chat(request: ChatRequest):
         raise HTTPException(status_code=400, detail="Query cannot be empty")
 
     try:
+        vector_store = get_vector_store()
         query_embedding = embed_text(request.query)
+
         results = vector_store.search(query_embedding, limit=5)
 
-        context_parts = []
-        for r in results:
-            payload = r.payload or {}
-            text = payload.get("text", "")
-            if text:
-                context_parts.append(text)
-
-        context = "\n\n".join(context_parts) or "No relevant documents found."
+        context = "\n\n".join(
+            r.payload.get("text", "")
+            for r in results
+            if r.payload
+        ) or "No relevant documents found."
 
         prompt = f"""
 Use ONLY the context below to answer.
