@@ -4,7 +4,6 @@ from app.clients.vector_client import VectorStore
 from app.core.config import settings
 from groq import Groq
 import logging
-from sentence_transformers import SentenceTransformer
 
 router = APIRouter(tags=["chat"])
 logger = logging.getLogger(__name__)
@@ -15,18 +14,7 @@ logger = logging.getLogger(__name__)
 vector_store = VectorStore(collection_name="enterprise_knowledge")
 
 # -------------------------
-# LAZY EMBEDDER
-# -------------------------
-_embedder = None
-
-def get_embedder():
-    global _embedder
-    if _embedder is None:
-        _embedder = SentenceTransformer("all-MiniLM-L6-v2")
-    return _embedder
-
-# -------------------------
-# LAZY GROQ CLIENT (CRITICAL FIX)
+# GROQ CLIENT (LAZY)
 # -------------------------
 _groq_client = None
 
@@ -37,6 +25,17 @@ def get_groq_client():
             raise RuntimeError("GROQ_API_KEY is not set")
         _groq_client = Groq(api_key=settings.GROQ_API_KEY)
     return _groq_client
+
+# -------------------------
+# EMBEDDING USING GROQ
+# -------------------------
+def embed_text(text: str) -> list[float]:
+    client = get_groq_client()
+    response = client.embeddings.create(
+        model="text-embedding-3-small",
+        input=[text],
+    )
+    return response.data[0].embedding
 
 # -------------------------
 # TEST ENDPOINT
@@ -60,10 +59,8 @@ async def chat(request: ChatRequest):
         raise HTTPException(status_code=400, detail="Query cannot be empty")
 
     try:
-        embedder = get_embedder()
-        groq_client = get_groq_client()
+        query_embedding = embed_text(request.query)
 
-        query_embedding = embedder.encode(request.query).tolist()
         results = vector_store.search(query_embedding, limit=5)
 
         context_parts = []
@@ -88,7 +85,8 @@ Question:
 Answer:
 """.strip()
 
-        completion = groq_client.chat.completions.create(
+        client = get_groq_client()
+        completion = client.chat.completions.create(
             model="llama3-8b-8192",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3,
