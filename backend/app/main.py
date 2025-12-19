@@ -1,72 +1,66 @@
+from fastapi import FastAPI
+from typing import Optional
 import os
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-
-from app.api.v1 import auth, health, documents, chat, admin
-from app.db.base import Base
-from app.db.session import engine
-
-# ===============================
-# Database initialization
-# ===============================
-Base.metadata.create_all(bind=engine)
-
-# ===============================
-# Create FastAPI app
-# ===============================
 app = FastAPI(
     title="Enterprise AI Knowledge System",
-    description="Private RAG System with Qdrant, Groq LLM, Multi-format Document Support",
-    version="1.0.0"
+    version="1.0.0",
 )
 
-# ===============================
-# CORS Middleware
-# ===============================
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "*"  # ✅ allows Railway frontend / demo access
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# -------------------------
+# Health & Root Endpoints
+# -------------------------
 
-# ===============================
-# API Routers
-# ===============================
-app.include_router(auth.router, prefix="/api/v1")
-app.include_router(health.router, prefix="/api/v1")
-app.include_router(documents.router, prefix="/api/v1")
-app.include_router(chat.router, prefix="/api/v1")
-app.include_router(admin.router, prefix="/api/v1")
-
-# ===============================
-# Root endpoint (health check)
-# ===============================
 @app.get("/")
-async def root():
-    return {
-        "status": "ok",
-        "message": "Enterprise AI Knowledge System API is running"
-    }
+def root():
+    return {"status": "ok", "service": "enterprise-ai-knowledge-system"}
 
-# ===============================
-# Railway / Production startup
-# ===============================
-if __name__ == "__main__":
-    import uvicorn
+@app.get("/health")
+def health():
+    return {"health": "healthy"}
 
-    # 🚨 CRITICAL: Railway injects PORT dynamically
-    port = int(os.environ.get("PORT", 8000))
 
-    uvicorn.run(
-        "app.main:app",
-        host="0.0.0.0",
-        port=port,
-        log_level="info",  # ✅ helps debugging
-    )
+# -------------------------
+# Lazy-loaded ML model
+# -------------------------
+
+_model = None
+
+def get_model():
+    """
+    Load sentence-transformer model only when needed.
+    This prevents Railway from crashing during startup/build.
+    """
+    global _model
+    if _model is None:
+        from sentence_transformers import SentenceTransformer
+        _model = SentenceTransformer("all-MiniLM-L6-v2")
+    return _model
+
+
+# -------------------------
+# Example embedding endpoint
+# -------------------------
+
+@app.post("/embed")
+def embed(text: str):
+    model = get_model()
+    embedding = model.encode(text).tolist()
+    return {"embedding": embedding}
+
+
+# -------------------------
+# Startup & Shutdown hooks
+# -------------------------
+
+@app.on_event("startup")
+def on_startup():
+    # Do NOT load ML models here
+    # Keep startup lightweight for Railway
+    pass
+
+
+@app.on_event("shutdown")
+def on_shutdown():
+    global _model
+    _model = None
