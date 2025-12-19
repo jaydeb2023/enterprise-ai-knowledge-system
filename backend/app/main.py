@@ -6,19 +6,25 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS (safe default)
+# ✅ CORS (VERY IMPORTANT for Vercel → Railway)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # OK for demo / free tier
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# ✅ ROOT (optional)
 @app.get("/")
 def root():
     return {"status": "ok", "service": "enterprise-ai-knowledge-system"}
 
-@app.get("/health")
+# ✅ HEALTH CHECK (THIS WAS MISSING)
+@app.get("/api/v1/health")
 def health():
-    return {"health": "healthy"}
+    return {"status": "ok", "service": "enterprise-ai-knowledge-system"}
+
+# 🔽 include your routers here
+# from app.api.v1.documents import router as documents_router
+# app.include_router(documents_router, prefix="/api/v1/documents", tags=["documents"])
