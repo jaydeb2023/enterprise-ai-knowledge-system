@@ -8,6 +8,15 @@ python-multipart
 pydantic
 redis
 httpx
-#sentence-transformers
 qdrant-client
 python-dotenv
+
+# === NEW: Safe & lightweight text extraction (works perfectly on Railway) ===
+PyPDF2==3.0.1                  # For PDF text extraction
+python-docx==1.1.2              # For DOCX text extraction
+beautifulsoup4==4.12.3          # For HTML text extraction (optional but useful)
+
+# === COMMENTED OUT: These cause crashes on Railway ===
+# sentence-transformers         # Uncomment later when adding embeddings
+# unstructured                  # REMOVED - causes import crash on Railway
+# unstructured[all-docs]        # REMOVED
