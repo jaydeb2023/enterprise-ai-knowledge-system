@@ -8,6 +8,6 @@ python-multipart
 pydantic
 redis
 httpx
-sentence-transformers
+#sentence-transformers
 qdrant-client
 python-dotenv
