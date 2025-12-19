@@ -1,5 +1,6 @@
-// ✅ Railway backend (PUBLIC)
-const API_BASE = "https://enterprise-ai-knowledge-system-production.up.railway.app/api/v1";
+const API_BASE =
+  import.meta.env.VITE_API_BASE_URL ||
+  "https://enterprise-ai-knowledge-system-production.up.railway.app/api/v1";
 
 export async function uploadDocument(file) {
   if (!file) {
@@ -16,20 +17,12 @@ export async function uploadDocument(file) {
     });
 
     if (!response.ok) {
-      let errorMessage = "Upload failed";
-      try {
-        const errorData = await response.json();
-        errorMessage = errorData.detail || errorMessage;
-      } catch {
-        errorMessage = `Server error (${response.status})`;
-      }
-      throw new Error(errorMessage);
+      const text = await response.text();
+      throw new Error(text || "Upload failed");
     }
 
     return await response.json();
   } catch (err) {
-    throw new Error(
-      "Cannot connect to backend. Backend URL not reachable."
-    );
+    throw new Error("Cannot connect to backend. Please try again.");
   }
 }
