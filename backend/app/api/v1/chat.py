@@ -1,10 +1,7 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-router = APIRouter(
-    prefix="/chat",
-    tags=["chat"]
-)
+router = APIRouter(prefix="/chat", tags=["chat"])  # prefix + tags = shows nicely in Swagger
 
 class ChatRequest(BaseModel):
     query: str
@@ -13,6 +10,7 @@ class ChatRequest(BaseModel):
 async def test():
     return {"chat": "ok"}
 
-@router.post("")
+@router.post("/")
 async def chat(req: ChatRequest):
-    return {"answer": "chat route is alive"}
+    # Your full AI chat logic here
+    return {"answer": "Full response based on documents"}
