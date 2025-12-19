@@ -1,5 +1,5 @@
 # C:\Users\debja\Downloads\enterprise-ai-knowledge-system\backend\app\api\v1\documents.py
-# FULL WORKING VERSION - NO UNSTRUCTURED DEPENDENCIES
+# FULL WORKING VERSION WITH QDRANT STORAGE + EMBEDDINGS
 
 from fastapi import APIRouter, UploadFile, Depends, HTTPException, File, BackgroundTasks
 from fastapi.responses import JSONResponse
@@ -9,11 +9,19 @@ import os
 import logging
 
 from app.db.session import SessionLocal
+from app.clients.vector_client import VectorStore
 import PyPDF2
 from docx import Document
 
+# NEW: For embeddings and Qdrant
+from sentence_transformers import SentenceTransformer
+
+# Initialize once at startup (efficient)
+embedder = SentenceTransformer("all-MiniLM-L6-v2")
+vector_store = VectorStore(collection_name="enterprise_knowledge")
+
 # ==============================
-# ROUTER (NO PREFIX HERE)
+# ROUTER
 # ==============================
 router = APIRouter(tags=["documents"])
 
@@ -44,10 +52,9 @@ def get_db():
         db.close()
 
 # ==============================
-# SAFE TEXT EXTRACTION (WORKS ON RAILWAY)
+# SAFE TEXT EXTRACTION
 # ==============================
 def extract_text_safe(file_path: str, filename: str) -> str:
-    """Extract text from common file types without heavy dependencies"""
     ext = os.path.splitext(filename)[1].lower()
     
     try:
@@ -75,22 +82,21 @@ def extract_text_safe(file_path: str, filename: str) -> str:
             return f"[Image file: {filename}] - Text extraction from images not supported yet"
         
         else:
-            return f"[Unsupported file type: {ext}] - Only PDF, DOCX, TXT supported for now"
+            return f"[Unsupported file type: {ext}]"
     
     except Exception as e:
         logger.error(f"Extraction failed for {filename}: {e}")
         return f"Extraction error: {str(e)}"
 
 # ==============================
-# OPTIONS FOR MOBILE BROWSERS
+# OPTIONS FOR MOBILE
 # ==============================
 @router.options("/upload")
 async def upload_options():
     return {}
 
 # ==============================
-# UPLOAD ENDPOINT - FULLY WORKING
-# URL: /documents/upload
+# UPLOAD ENDPOINT - NOW STORES IN QDRANT
 # ==============================
 @router.post("/upload")
 async def upload_document(
@@ -101,57 +107,68 @@ async def upload_document(
     if not file.filename:
         raise HTTPException(status_code=400, detail="No filename provided")
     
-    # Validate extension
     ext = os.path.splitext(file.filename)[1].lower()
     if ext not in ALLOWED_EXTENSIONS:
-        raise HTTPException(status_code=400, detail=f"Unsupported file type: {ext}. Supported: PDF, DOCX, TXT, MD, CSV, JPG, PNG")
+        raise HTTPException(status_code=400, detail=f"Unsupported file type: {ext}")
 
-    # Read file
     content = await file.read()
-    if len(content) > 50 * 1024 * 1024:  # 50MB
+    if len(content) > 50 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="File too large (max 50MB)")
 
     tmp_path = None
     try:
-        # Save temp file
         with tempfile.NamedTemporaryFile(delete=False, suffix=ext, dir="/tmp") as tmp:
             tmp.write(content)
             tmp_path = tmp.name
 
-        # Extract text (NOW SAFE - NO CRASH)
         text = extract_text_safe(tmp_path, file.filename)
         
         if not text or len(text.strip()) < 10:
-            raise HTTPException(status_code=400, detail="No meaningful text extracted from file")
+            raise HTTPException(status_code=400, detail="No meaningful text extracted")
 
-        # 🚨 TEMPORARY RESPONSE (NO QDRANT YET - WORKING TEST MODE)
+        # === REAL INDEXING: Split → Embed → Store in Qdrant ===
+        chunk_size = 500
+        chunks = [text[i:i + chunk_size] for i in range(0, len(text), chunk_size)]
+
+        embeddings = embedder.encode(chunks).tolist()
+
+        payloads = [
+            {
+                "text": chunk,
+                "filename": file.filename,
+                "chunk_index": idx
+            }
+            for idx, chunk in enumerate(chunks)
+        ]
+
+        vector_store.add_embeddings(embeddings, payloads)
+
+        # === SUCCESS RESPONSE ===
         return JSONResponse(
             status_code=200,
             content={
-                "message": "✅ Upload OK (public test mode)",
+                "message": "✅ Document uploaded and indexed successfully!",
                 "filename": file.filename,
-                "file_type": ext,
+                "chunks_stored": len(chunks),
                 "text_length": len(text),
-                "preview": text[:500] + "..." if len(text) > 500 else text,
-                "status": "success"
+                "preview": text[:500] + ("..." if len(text) > 500 else "")
             }
         )
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Upload error for {file.filename}: {e}")
-        raise HTTPException(status_code=500, detail=f"Upload processing failed: {str(e)}")
+        logger.error(f"Upload error: {e}")
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
     finally:
-        # Clean up temp file
         if tmp_path and os.path.exists(tmp_path):
             try:
                 os.unlink(tmp_path)
             except Exception as e:
-                logger.warning(f"Failed to delete temp file {tmp_path}: {e}")
+                logger.warning(f"Failed to delete temp file: {e}")
 
 # ==============================
-# HEALTH CHECK FOR THIS ROUTER
+# TEST ENDPOINT
 # ==============================
 @router.get("/test")
 async def test_documents():
