@@ -1,10 +1,13 @@
-const API_BASE =
-  import.meta.env.VITE_API_BASE_URL ||
-  "https://enterprise-ai-knowledge-system-production.up.railway.app/api/v1";
+// Use Vercel environment variable
+const API_BASE = import.meta.env.VITE_API_URL;
 
 export async function uploadDocument(file) {
   if (!file) {
     throw new Error("No file provided");
+  }
+
+  if (!API_BASE) {
+    throw new Error("VITE_API_URL is not defined");
   }
 
   const formData = new FormData();
@@ -23,6 +26,8 @@ export async function uploadDocument(file) {
 
     return await response.json();
   } catch (err) {
-    throw new Error("Cannot connect to backend. Please try again.");
+    throw new Error(
+      "Cannot connect to backend. Please check backend URL and CORS."
+    );
   }
 }
