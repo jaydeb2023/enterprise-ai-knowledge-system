@@ -5,7 +5,11 @@ from app.core.config import settings
 from groq import Groq
 import logging
 
-router = APIRouter(tags=["chat"])
+router = APIRouter(
+    prefix="/chat",
+    tags=["chat"]
+)
+
 logger = logging.getLogger(__name__)
 
 # -------------------------
@@ -53,14 +57,13 @@ class ChatRequest(BaseModel):
 # -------------------------
 # CHAT ENDPOINT
 # -------------------------
-@router.post("/chat")
+@router.post("")
 async def chat(request: ChatRequest):
     if not request.query.strip():
         raise HTTPException(status_code=400, detail="Query cannot be empty")
 
     try:
         query_embedding = embed_text(request.query)
-
         results = vector_store.search(query_embedding, limit=5)
 
         context_parts = []
