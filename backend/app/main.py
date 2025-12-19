@@ -1,12 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-# Add this with other imports
-from app.api.v1.chat import router as chat_router
 
-# Add this with other include_router calls
-app.include_router(chat_router)
 # =========================
-# APP
+# APP - CREATE FIRST
 # =========================
 app = FastAPI(
     title="Enterprise AI Knowledge System",
@@ -32,13 +28,15 @@ async def root():
     return {"status": "ok"}
 
 # =========================
-# IMPORT ROUTERS
+# IMPORT ROUTERS (AFTER app is created)
 # =========================
 from app.api.v1.health import router as health_router
 from app.api.v1.documents import router as documents_router
+from app.api.v1.chat import router as chat_router   # ← Now safe to import
 
 # =========================
-# INCLUDE ROUTERS
+# INCLUDE ROUTERS (AFTER imports)
 # =========================
 app.include_router(health_router)
 app.include_router(documents_router, prefix="/documents")
+app.include_router(chat_router)   # ← This makes /chat work!
