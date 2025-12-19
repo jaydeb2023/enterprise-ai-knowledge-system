@@ -1,8 +1,10 @@
+// frontend/src/api/documents.js
+
 const API_BASE = import.meta.env.VITE_API_URL;
 
 export async function uploadDocument(file) {
   if (!file) {
-    throw new Error("No file provided");
+    throw new Error("No file selected");
   }
 
   const formData = new FormData();
@@ -14,7 +16,8 @@ export async function uploadDocument(file) {
   });
 
   if (!response.ok) {
-    throw new Error("Upload failed. Backend unreachable.");
+    const text = await response.text();
+    throw new Error(text || "Upload failed");
   }
 
   return await response.json();
