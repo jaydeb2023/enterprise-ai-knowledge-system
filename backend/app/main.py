@@ -1,3 +1,4 @@
+# FORCE LATEST DEPLOY - chat endpoint fixed 2025
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 # FINAL FIX - force clean deploy for chat endpoint
