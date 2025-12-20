@@ -8,7 +8,7 @@ import logging
 from app.db.session import SessionLocal
 from app.clients.vector_client import VectorStore
 from app.core.config import settings
-from groq import Groq
+from openai import OpenAI  # Changed from groq to openai for embeddings support
 
 import PyPDF2
 from docx import Document
@@ -23,18 +23,18 @@ router = APIRouter(tags=["documents"])
 # ==============================
 vector_store = VectorStore(collection_name="enterprise_knowledge")
 
-_groq_client = None
+_openai_client = None
 
-def get_groq_client():
-    global _groq_client
-    if _groq_client is None:
-        if not settings.GROQ_API_KEY:
-            raise RuntimeError("GROQ_API_KEY is not set")
-        _groq_client = Groq(api_key=settings.GROQ_API_KEY)
-    return _groq_client
+def get_openai_client():
+    global _openai_client
+    if _openai_client is None:
+        if not settings.OPENAI_API_KEY:
+            raise RuntimeError("OPENAI_API_KEY is not set")
+        _openai_client = OpenAI(api_key=settings.OPENAI_API_KEY)
+    return _openai_client
 
 def embed_texts(texts: list[str]) -> list[list[float]]:
-    client = get_groq_client()
+    client = get_openai_client()
     response = client.embeddings.create(
         model="text-embedding-3-small",
         input=texts
