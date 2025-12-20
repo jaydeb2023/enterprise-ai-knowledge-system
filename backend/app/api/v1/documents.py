@@ -7,43 +7,34 @@ import logging
 
 from app.db.session import SessionLocal
 from app.clients.vector_client import VectorStore
-from app.core.config import settings
-from openai import OpenAI  # Changed from groq to openai for embeddings support
+# Remove Groq import for embeddings
 
 import PyPDF2
 from docx import Document
 
-# ==============================
-# ROUTER
-# ==============================
+# NEW: Local embeddings (free, no API key)
+from sentence_transformers import SentenceTransformer
+
 router = APIRouter(tags=["documents"])
 
-# ==============================
-# CLIENTS (SAFE)
-# ==============================
 vector_store = VectorStore(collection_name="enterprise_knowledge")
 
-_openai_client = None
+# Local embedding model (loads once)
+_embedding_model = None
 
-def get_openai_client():
-    global _openai_client
-    if _openai_client is None:
-        if not settings.OPENAI_API_KEY:
-            raise RuntimeError("OPENAI_API_KEY is not set")
-        _openai_client = OpenAI(api_key=settings.OPENAI_API_KEY)
-    return _openai_client
+def get_embedding_model():
+    global _embedding_model
+    if _embedding_model is None:
+        # Small, fast, good quality model (384 dimensions)
+        _embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+    return _embedding_model
 
 def embed_texts(texts: list[str]) -> list[list[float]]:
-    client = get_openai_client()
-    response = client.embeddings.create(
-        model="text-embedding-3-small",
-        input=texts
-    )
-    return [e.embedding for e in response.data]
+    model = get_embedding_model()
+    # Returns list of embeddings, normalized
+    return model.encode(texts, normalize_embeddings=True).tolist()
 
-# ==============================
-# CONFIG
-# ==============================
+# Rest of your code unchanged...
 ALLOWED_EXTENSIONS = {
     ".txt", ".md", ".csv",
     ".pdf",
@@ -57,9 +48,6 @@ ALLOWED_EXTENSIONS = {
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ==============================
-# DB DEPENDENCY
-# ==============================
 def get_db():
     db = SessionLocal()
     try:
@@ -67,9 +55,6 @@ def get_db():
     finally:
         db.close()
 
-# ==============================
-# SAFE TEXT EXTRACTION
-# ==============================
 def extract_text_safe(file_path: str, filename: str) -> str:
     ext = os.path.splitext(filename)[1].lower()
 
@@ -103,16 +88,10 @@ def extract_text_safe(file_path: str, filename: str) -> str:
         logger.error(f"Extraction failed for {filename}: {e}")
         return ""
 
-# ==============================
-# OPTIONS
-# ==============================
 @router.options("/upload")
 async def upload_options():
     return {}
 
-# ==============================
-# UPLOAD ENDPOINT
-# ==============================
 @router.post("/upload")
 async def upload_document(
     background_tasks: BackgroundTasks,
@@ -165,9 +144,6 @@ async def upload_document(
         if tmp_path and os.path.exists(tmp_path):
             os.unlink(tmp_path)
 
-# ==============================
-# TEST ENDPOINT
-# ==============================
 @router.get("/test")
 async def test_documents():
     return {"documents_service": "ok"}
