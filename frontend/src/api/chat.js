@@ -1,4 +1,5 @@
-const API_BASE = "https://enterprise-ai-knowledge-system-production.up.railway.app";
+// Use VITE_API_URL from env (set in Vercel) or fallback to localhost for dev
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 export async function askAI(question) {
   if (!question || question.trim() === "") {
