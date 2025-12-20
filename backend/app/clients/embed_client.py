@@ -9,9 +9,9 @@ class EmbedClient:
 
     def embed(self, texts: List[str]) -> List[List[float]]:
         if EmbedClient._model is None:
-            logger.info("First time: Loading FastEmbed model (this takes 15-30 seconds)...")
-            EmbedClient._model = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
-            logger.info("Model loaded successfully!")
-
+            logger.info("Loading lightweight embedding model (fast first time)...")
+            # ← CHANGE THIS LINE ONLY
+            EmbedClient._model = TextEmbedding(model_name="sentence-transformers/all-MiniLM-L6-v2")
+            logger.info("Model loaded!")
         embeddings = list(EmbedClient._model.embed(texts))
         return [emb.tolist() for emb in embeddings]
