@@ -1,6 +1,6 @@
 import os
 import uvicorn
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -11,7 +11,6 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# CORS middleware - allow all origins
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -28,16 +27,15 @@ def root():
 def health():
     return {"status": "ok"}
 
-# Explicit preflight handler for /documents/upload (fixes multipart upload CORS)
+# THIS IS THE FIX — explicit OPTIONS for upload
 @app.options("/documents/upload")
-async def options_upload():
+async def options_documents_upload():
     return JSONResponse(
-        content={},
+        content={"detail": "OK"},
         headers={
             "Access-Control-Allow-Origin": "*",
             "Access-Control-Allow-Methods": "POST, OPTIONS",
             "Access-Control-Allow-Headers": "*",
-            "Access-Control-Max-Age": "86400",
         }
     )
 
