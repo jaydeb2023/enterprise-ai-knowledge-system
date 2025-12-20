@@ -7,34 +7,37 @@ import logging
 
 from app.db.session import SessionLocal
 from app.clients.vector_client import VectorStore
-# Remove Groq import for embeddings
 
 import PyPDF2
 from docx import Document
 
-# NEW: Local embeddings (free, no API key)
-from sentence_transformers import SentenceTransformer
+# NEW: FastEmbed - lightweight, fast, no heavy dependencies
+from fastembed import TextEmbedding
 
 router = APIRouter(tags=["documents"])
 
 vector_store = VectorStore(collection_name="enterprise_knowledge")
 
-# Local embedding model (loads once)
+# Singleton embedding model (loads once on first use)
 _embedding_model = None
 
 def get_embedding_model():
     global _embedding_model
     if _embedding_model is None:
-        # Small, fast, good quality model (384 dimensions)
-        _embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+        print("Loading FastEmbed model (first request may take ~10-20s)...")
+        # BGE-Small is excellent, fast, and tiny (~135 MB download)
+        _embedding_model = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
     return _embedding_model
 
 def embed_texts(texts: list[str]) -> list[list[float]]:
     model = get_embedding_model()
-    # Returns list of embeddings, normalized
-    return model.encode(texts, normalize_embeddings=True).tolist()
+    # FastEmbed returns iterator of arrays → convert to list of lists
+    embeddings = list(model.embed(texts))
+    return [embedding.tolist() for embedding in embeddings]
 
-# Rest of your code unchanged...
+# ==============================
+# CONFIG & HELPERS
+# ==============================
 ALLOWED_EXTENSIONS = {
     ".txt", ".md", ".csv",
     ".pdf",
@@ -88,6 +91,9 @@ def extract_text_safe(file_path: str, filename: str) -> str:
         logger.error(f"Extraction failed for {filename}: {e}")
         return ""
 
+# ==============================
+# ROUTES
+# ==============================
 @router.options("/upload")
 async def upload_options():
     return {}

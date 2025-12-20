@@ -16,6 +16,5 @@ PyPDF2==3.0.1
 python-docx==1.1.2
 beautifulsoup4==4.12.3
 
-# NEW: Free local embeddings (fixes Groq embedding error)
-sentence-transformers==3.1.1
-torch==2.4.1  # Required by sentence-transformers (Railway handles this well)
+# Lightweight, high-performance embeddings - NO TORCH, perfect for free plan
+fastembed==0.3.6
