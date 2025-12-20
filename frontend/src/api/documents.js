@@ -1,5 +1,5 @@
-// Use VITE_API_URL from env (set in Vercel) or fallback to localhost for dev
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
+// Remove trailing slash from base URL to avoid double slash in paths
+const API_BASE = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/$/, "");
 
 export async function uploadDocument(file) {
   const formData = new FormData();

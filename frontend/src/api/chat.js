@@ -1,4 +1,5 @@
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
+// Remove trailing slash from base URL to avoid double slash in paths
+const API_BASE = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/$/, "");
 
 export async function askAI(question) {
   if (!question || question.trim() === "") {
