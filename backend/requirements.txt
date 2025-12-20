@@ -18,3 +18,5 @@ beautifulsoup4==4.12.3
 
 # Lightweight, high-performance embeddings - NO TORCH, perfect for free plan
 fastembed==0.3.6
+# ... your existing lines ...
+pydantic-settings==2.5.2  # Add this line
