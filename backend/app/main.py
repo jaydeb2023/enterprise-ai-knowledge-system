@@ -2,7 +2,6 @@ import os
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 
 app = FastAPI(
     title="Enterprise AI Knowledge System",
@@ -11,6 +10,7 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
+# CORS - allow all origins (production safe for demo)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -26,18 +26,6 @@ def root():
 @app.get("/health")
 def health():
     return {"status": "ok"}
-
-# THIS IS THE FIX — explicit OPTIONS for upload
-@app.options("/documents/upload")
-async def options_documents_upload():
-    return JSONResponse(
-        content={"detail": "OK"},
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "POST, OPTIONS",
-            "Access-Control-Allow-Headers": "*",
-        }
-    )
 
 # Include routers
 from app.api.v1.documents import router as documents_router

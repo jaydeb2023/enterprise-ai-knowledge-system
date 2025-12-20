@@ -10,34 +10,30 @@ from app.clients.vector_client import VectorStore
 
 import PyPDF2
 from docx import Document
+from fastapi import Request
 
-# NEW: FastEmbed - lightweight, fast, no heavy dependencies
+# FastEmbed
 from fastembed import TextEmbedding
 
 router = APIRouter(tags=["documents"])
 
 vector_store = VectorStore(collection_name="enterprise_knowledge")
 
-# Singleton embedding model (loads once on first use)
+# Embedding model singleton
 _embedding_model = None
 
 def get_embedding_model():
     global _embedding_model
     if _embedding_model is None:
-        print("Loading FastEmbed model (first request may take ~10-20s)...")
-        # BGE-Small is excellent, fast, and tiny (~135 MB download)
+        print("Loading FastEmbed model...")
         _embedding_model = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
     return _embedding_model
 
 def embed_texts(texts: list[str]) -> list[list[float]]:
     model = get_embedding_model()
-    # FastEmbed returns iterator of arrays → convert to list of lists
     embeddings = list(model.embed(texts))
     return [embedding.tolist() for embedding in embeddings]
 
-# ==============================
-# CONFIG & HELPERS
-# ==============================
 ALLOWED_EXTENSIONS = {
     ".txt", ".md", ".csv",
     ".pdf",
@@ -58,45 +54,22 @@ def get_db():
     finally:
         db.close()
 
-def extract_text_safe(file_path: str, filename: str) -> str:
-    ext = os.path.splitext(filename)[1].lower()
+def extract_text_safe(file_path: str, filename: str) -> str
+    # ... your existing extract_text_safe function (keep as is)
+    # (same as before)
 
-    try:
-        if ext == ".pdf":
-            with open(file_path, "rb") as f:
-                reader = PyPDF2.PdfReader(f)
-                return "\n\n".join(page.extract_text() or "" for page in reader.pages).strip()
-
-        elif ext in [".txt", ".md", ".csv"]:
-            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-                return f.read().strip()
-
-        elif ext == ".docx":
-            doc = Document(file_path)
-            return "\n\n".join(p.text for p in doc.paragraphs if p.text.strip()).strip()
-
-        elif ext in [".html", ".htm"]:
-            from bs4 import BeautifulSoup
-            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-                soup = BeautifulSoup(f.read(), "html.parser")
-                return soup.get_text(separator="\n\n").strip()
-
-        elif ext in [".jpg", ".jpeg", ".png", ".tiff"]:
-            return f"[Image file: {filename}]"
-
-        else:
-            return f"[Unsupported file type: {ext}]"
-
-    except Exception as e:
-        logger.error(f"Extraction failed for {filename}: {e}")
-        return ""
-
-# ==============================
-# ROUTES
-# ==============================
+# CRITICAL FIX: Explicit OPTIONS for preflight on upload
 @router.options("/upload")
-async def upload_options():
-    return {}
+async def options_upload():
+    return JSONResponse(
+        content={},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Max-Age": "86400",
+        }
+    )
 
 @router.post("/upload")
 async def upload_document(
@@ -104,51 +77,8 @@ async def upload_document(
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="No filename provided")
-
-    ext = os.path.splitext(file.filename)[1].lower()
-    if ext not in ALLOWED_EXTENSIONS:
-        raise HTTPException(status_code=400, detail=f"Unsupported file type: {ext}")
-
-    content = await file.read()
-    if len(content) > 50 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="File too large")
-
-    tmp_path = None
-    try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=ext, dir="/tmp") as tmp:
-            tmp.write(content)
-            tmp_path = tmp.name
-
-        text = extract_text_safe(tmp_path, file.filename)
-        if not text or len(text) < 10:
-            raise HTTPException(status_code=400, detail="No meaningful text extracted")
-
-        chunk_size = 500
-        chunks = [text[i:i + chunk_size] for i in range(0, len(text), chunk_size)]
-
-        embeddings = embed_texts(chunks)
-
-        payloads = [
-            {"text": chunk, "filename": file.filename, "chunk_index": i}
-            for i, chunk in enumerate(chunks)
-        ]
-
-        vector_store.add_embeddings(embeddings, payloads)
-
-        return JSONResponse(
-            status_code=200,
-            content={
-                "message": "Document uploaded and indexed successfully",
-                "filename": file.filename,
-                "chunks_stored": len(chunks)
-            }
-        )
-
-    finally:
-        if tmp_path and os.path.exists(tmp_path):
-            os.unlink(tmp_path)
+    # ... your existing upload_document code (keep exactly as is)
+    # (the long function you had)
 
 @router.get("/test")
 async def test_documents():
