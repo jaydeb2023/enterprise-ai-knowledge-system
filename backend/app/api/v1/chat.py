@@ -2,7 +2,6 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 import logging
 from typing import List
-import numpy as np  # for FastEmbed
 
 router = APIRouter()
 
@@ -20,32 +19,34 @@ async def chat(req: ChatRequest):
     try:
         from app.clients.vector_client import VectorStore
         from app.clients.llm_client import LLMClient
-        from app.clients.embed_client import EmbedClient  # You'll need this (see below)
+        from app.clients.embed_client import EmbedClient
         from app.core.config import settings
 
         if not settings.GROQ_API_KEY:
             raise RuntimeError("GROQ_API_KEY missing")
 
         # 1. Embed query
-        embed_client = EmbedClient()  # Assuming you have this client
-        query_embedding = embed_client.embed([req.query])[0]  # single query
+        embed_client = EmbedClient()
+        query_embedding = embed_client.embed([req.query])[0]  # Returns list of lists → take first
 
         # 2. Retrieve from Qdrant
-        vector_store = VectorStore(collection_name="documents")  # your collection name
+        vector_store = VectorStore(collection_name="documents")
         results = vector_store.search(query_embedding, limit=5)
-        
-        logger.info(f"Retrieved {len(results)} chunks for query: {req.query}")
 
-        # 3. Build context from payloads
-        context = ""
-        if results:
-            context = "\n\n".join([r.payload.get("text", "No text") for r in results])
-        else:
-            return {"answer": "No documents found. Please upload documents first."}
+        logger.info(f"Retrieved {len(results)} chunks for query: '{req.query}'")
 
-        # 4. RAG Prompt for Groq
-        prompt = f"""You are a helpful assistant. Answer the question based ONLY on the following context from uploaded documents.
-If the context doesn't contain the answer, say "I couldn't find that information in the documents."
+        # 3. Build context
+        if not results:
+            return {"answer": "No relevant information found in the uploaded documents. Please upload documents first."}
+
+        context = "\n\n".join([
+            r.payload.get("text", "") if isinstance(r.payload, dict) else ""
+            for r in results
+        ])
+
+        # 4. RAG Prompt
+        prompt = f"""You are a helpful assistant. Answer the user's question using ONLY the following context from uploaded documents.
+If the context does not contain enough information, say "I couldn't find that information in the documents."
 
 Context:
 {context}

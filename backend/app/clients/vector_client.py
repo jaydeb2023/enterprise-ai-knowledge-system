@@ -3,11 +3,12 @@ import uuid
 from typing import List
 
 from qdrant_client import QdrantClient
-from qdrant_client.http.models import Distance, VectorParams, PointStruct
+from qdrant_client.models import Distance, VectorParams, PointStruct
+from qdrant_client.models import QueryPoints  # New import for modern search
 
 
 class VectorStore:
-    def __init__(self, collection_name: str):
+    def __init__(self, collection_name: str = "documents"):
         self.collection_name = collection_name
 
         # ✅ CONNECT TO QDRANT CLOUD
@@ -26,7 +27,7 @@ class VectorStore:
             self.client.create_collection(
                 collection_name=self.collection_name,
                 vectors_config=VectorParams(
-                    size=384,  # must match your embedding dimension
+                    size=384,  # matches FastEmbed BAAI/bge-small-en-v1.5
                     distance=Distance.COSINE,
                 ),
             )
@@ -47,8 +48,12 @@ class VectorStore:
         )
 
     def search(self, query_vector: List[float], limit: int = 5):
-        return self.client.search(
+        """Modern search using query_points (replaces deprecated .search)"""
+        result = self.client.query_points(
             collection_name=self.collection_name,
-            query_vector=query_vector,
+            query=query_vector,
             limit=limit,
+            with_payload=True,   # Crucial: get the text back
+            with_vectors=False,
         )
+        return result.points  # List of ScoredPoint objects
