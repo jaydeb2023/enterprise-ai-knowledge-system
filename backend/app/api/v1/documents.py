@@ -11,7 +11,7 @@ from app.clients.vector_client import VectorStore
 import PyPDF2
 from docx import Document
 
-# FastEmbed - lightweight embeddings
+# FastEmbed
 from fastembed import TextEmbedding
 
 # ==============================
@@ -39,7 +39,7 @@ def get_embedding_model():
 def embed_texts(texts: list[str]) -> list[list[float]]:
     model = get_embedding_model()
     embeddings = list(model.embed(texts))
-    return [embedding.tolist() for embedding in embeddings]
+    return [e.tolist() for e in embeddings]
 
 # ==============================
 # CONFIG
@@ -47,9 +47,7 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
 ALLOWED_EXTENSIONS = {
     ".txt", ".md", ".csv",
     ".pdf",
-    ".docx", ".doc",
-    ".xlsx", ".xls",
-    ".pptx", ".ppt",
+    ".docx",
     ".html", ".htm",
     ".jpg", ".jpeg", ".png", ".tiff"
 }
@@ -77,7 +75,7 @@ def extract_text_safe(file_path: str, filename: str) -> str:
         if ext == ".pdf":
             with open(file_path, "rb") as f:
                 reader = PyPDF2.PdfReader(f)
-                return "\n\n".join(page.extract_text() or "" for page in reader.pages).strip()
+                return "\n".join(page.extract_text() or "" for page in reader.pages).strip()
 
         elif ext in [".txt", ".md", ".csv"]:
             with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
@@ -85,26 +83,26 @@ def extract_text_safe(file_path: str, filename: str) -> str:
 
         elif ext == ".docx":
             doc = Document(file_path)
-            return "\n\n".join(p.text for p in doc.paragraphs if p.text.strip()).strip()
+            return "\n".join(p.text for p in doc.paragraphs if p.text.strip()).strip()
 
         elif ext in [".html", ".htm"]:
             from bs4 import BeautifulSoup
             with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                 soup = BeautifulSoup(f.read(), "html.parser")
-                return soup.get_text(separator="\n\n").strip()
+                return soup.get_text(separator="\n").strip()
 
         elif ext in [".jpg", ".jpeg", ".png", ".tiff"]:
             return f"[Image file: {filename}]"
 
         else:
-            return f"[Unsupported file type: {ext}]"
+            return ""
 
     except Exception as e:
-        logger.error(f"Extraction failed for {filename}: {e}")
+        logger.error(f"Text extraction failed: {e}")
         return ""
 
 # ==============================
-# CRITICAL FIX: OPTIONS handler for preflight (fixes upload 404/CORS)
+# OPTIONS (CORS PREFLIGHT)
 # ==============================
 @router.options("/upload")
 async def options_upload():
@@ -112,11 +110,37 @@ async def options_upload():
         content={},
         headers={
             "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
             "Access-Control-Allow-Headers": "*",
             "Access-Control-Max-Age": "86400",
-        }
+        },
     )
+
+# ==============================
+# SMART CHUNKING (CRITICAL FIX)
+# ==============================
+def smart_chunk_text(text: str) -> list[str]:
+    """
+    Semantic chunking:
+    - Groups related lines together
+    - Keeps invoice fields in same chunk
+    """
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    chunks = []
+    current = ""
+
+    for line in lines:
+        if len(current) + len(line) <= 300:
+            current += line + "\n"
+        else:
+            chunks.append(current.strip())
+            current = line + "\n"
+
+    if current.strip():
+        chunks.append(current.strip())
+
+    # remove duplicates just in case
+    return list(dict.fromkeys(chunks))
 
 # ==============================
 # UPLOAD ENDPOINT
@@ -125,7 +149,7 @@ async def options_upload():
 async def upload_document(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     if not file.filename:
         raise HTTPException(status_code=400, detail="No filename provided")
@@ -139,6 +163,7 @@ async def upload_document(
         raise HTTPException(status_code=400, detail="File too large")
 
     tmp_path = None
+
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=ext, dir="/tmp") as tmp:
             tmp.write(content)
@@ -148,13 +173,21 @@ async def upload_document(
         if not text or len(text) < 10:
             raise HTTPException(status_code=400, detail="No meaningful text extracted")
 
-        chunk_size = 500
-        chunks = [text[i:i + chunk_size] for i in range(0, len(text), chunk_size)]
+        # 🔥 FIXED CHUNKING
+        chunks = smart_chunk_text(text)
+
+        logger.info(f"Indexing {len(chunks)} chunks")
+        for c in chunks:
+            logger.info(f"CHUNK:\n{c}")
 
         embeddings = embed_texts(chunks)
 
         payloads = [
-            {"text": chunk, "filename": file.filename, "chunk_index": i}
+            {
+                "text": chunk,
+                "filename": file.filename,
+                "chunk_index": i,
+            }
             for i, chunk in enumerate(chunks)
         ]
 
@@ -165,8 +198,8 @@ async def upload_document(
             content={
                 "message": "Document uploaded and indexed successfully",
                 "filename": file.filename,
-                "chunks_stored": len(chunks)
-            }
+                "chunks_stored": len(chunks),
+            },
         )
 
     finally:
