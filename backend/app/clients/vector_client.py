@@ -12,22 +12,26 @@ class VectorStore:
         self.client = QdrantClient(
             url=os.getenv("QDRANT_URL"),
             api_key=os.getenv("QDRANT_API_KEY"),
+            timeout=60,  # Increase timeout for cloud
         )
 
         self._init_collection()
 
     def _init_collection(self):
-        collections = self.client.get_collections().collections
-        collection_names = [c.name for c in collections]
+        try:
+            collections = self.client.get_collections()
+            collection_names = [c.name for c in collections.collections]
 
-        if self.collection_name not in collection_names:
-            self.client.create_collection(
-                collection_name=self.collection_name,
-                vectors_config=VectorParams(
-                    size=384,
-                    distance=Distance.COSINE,
-                ),
-            )
+            if self.collection_name not in collection_names:
+                self.client.create_collection(
+                    collection_name=self.collection_name,
+                    vectors_config=VectorParams(
+                        size=384,
+                        distance=Distance.COSINE,
+                    ),
+                )
+        except Exception as e:
+            print(f"Collection init error: {e}")
 
     def add_embeddings(self, embeddings: List[List[float]], payloads: List[dict]):
         points = [
@@ -45,12 +49,15 @@ class VectorStore:
         )
 
     def search(self, query_vector: List[float], limit: int = 5):
-        # This is the correct, stable method in current qdrant-client
-        hits = self.client.search(
-            collection_name=self.collection_name,
-            query_vector=query_vector,
-            limit=limit,
-            with_payload=True,  # Get the text
-            with_vectors=False,
-        )
-        return hits
+        try:
+            search_result = self.client.search(
+                collection_name=self.collection_name,
+                query_vector=query_vector,
+                limit=limit,
+                with_payload=True,
+                with_vectors=False,
+            )
+            return search_result
+        except Exception as e:
+            print(f"Search error: {e}")
+            return []
