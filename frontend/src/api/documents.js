@@ -15,16 +15,30 @@ export async function uploadDocument(file) {
   const formData = new FormData();
   formData.append("file", file);
 
-  const response = await fetch(`${API_BASE}/documents/upload`, {
-    method: "POST",
-    body: formData,
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
 
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(text || "Document upload failed. Please try again.");
+  try {
+    const response = await fetch(`${API_BASE}/documents/upload`, {
+      method: "POST",
+      body: formData,
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(text || "Document upload failed. Please try again.");
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error.name === "AbortError") {
+      throw new Error("Upload timed out. Try a smaller file or better network.");
+    }
+    throw error;
   }
-
-  const data = await response.json();
-  return data; // Usually { message: "Document uploaded and indexed successfully!" }
 }
