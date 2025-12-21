@@ -5,12 +5,10 @@ from typing import List
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
 
-
 class VectorStore:
     def __init__(self, collection_name: str = "documents"):
         self.collection_name = collection_name
 
-        # ✅ CONNECT TO QDRANT CLOUD
         self.client = QdrantClient(
             url=os.getenv("QDRANT_URL"),
             api_key=os.getenv("QDRANT_API_KEY"),
@@ -26,7 +24,7 @@ class VectorStore:
             self.client.create_collection(
                 collection_name=self.collection_name,
                 vectors_config=VectorParams(
-                    size=384,  # matches FastEmbed BAAI/bge-small-en-v1.5
+                    size=384,
                     distance=Distance.COSINE,
                 ),
             )
@@ -47,12 +45,12 @@ class VectorStore:
         )
 
     def search(self, query_vector: List[float], limit: int = 5):
-        """Stable search method compatible with latest qdrant-client"""
+        # This is the correct, stable method in current qdrant-client
         hits = self.client.search(
             collection_name=self.collection_name,
             query_vector=query_vector,
             limit=limit,
-            with_payload=True,   # Crucial: returns the text chunks
+            with_payload=True,  # Get the text
             with_vectors=False,
         )
-        return hits  # List of ScoredPoint objects
+        return hits
