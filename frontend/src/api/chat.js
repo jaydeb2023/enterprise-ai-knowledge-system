@@ -1,6 +1,12 @@
-// Remove trailing slash from base URL to avoid double slash in paths
+// API base URL - uses VITE_API_URL environment variable in production (set in Vercel)
+// Falls back to localhost for development
 const API_BASE = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/$/, "");
 
+/**
+ * Send a question to the AI backend and get the RAG response
+ * @param {string} question - The user's question
+ * @returns {Promise<Object>} - { answer: string }
+ */
 export async function askAI(question) {
   if (!question || question.trim() === "") {
     throw new Error("Please enter a question");
@@ -16,8 +22,9 @@ export async function askAI(question) {
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(text || "AI request failed");
+    throw new Error(text || "Failed to get AI response. Please try again.");
   }
 
-  return await response.json();
+  const data = await response.json();
+  return data; // { answer: "..." }
 }
