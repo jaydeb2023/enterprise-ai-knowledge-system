@@ -3,7 +3,6 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-# ← ADD THIS IMPORT
 from app.clients.embed_client import EmbedClient
 
 app = FastAPI(
@@ -13,15 +12,13 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# FINAL CORS CONFIGURATION
+# ✅ CORRECT CORS CONFIG (FIXES FAILED TO FETCH)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_origins=["*"],          # Allow all origins (Vercel, localhost, etc.)
+    allow_credentials=False,      # ❗ MUST be False with "*"
+    allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["*"],
-    max_age=3600,
 )
 
 # Root endpoint
@@ -34,16 +31,15 @@ def root():
 def health():
     return {"status": "ok"}
 
-# ← ADD THIS STARTUP EVENT
+# ✅ Preload embedding model on startup (prevents first-request delay)
 @app.on_event("startup")
 async def preload_embedding_model():
     print("Pre-loading embedding model on startup...")
     embed_client = EmbedClient()
-    # Force load by embedding dummy text
     embed_client.embed(["warmup text to load model"])
     print("Embedding model pre-loaded successfully!")
 
-# Include routers
+# Routers
 from app.api.v1.documents import router as documents_router
 from app.api.v1.chat import router as chat_router
 
