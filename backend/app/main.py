@@ -10,20 +10,23 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# CORS - MUST BE THE FIRST MIDDLEWARE
+# FINAL CORS CONFIGURATION - THIS FIXES THE ERROR
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins (Vercel, localhost, etc.)
+    allow_origins=["*"],  # Allow all origins including Vercel
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
-    expose_headers=["*"],  # Important for some browsers/platforms
+    expose_headers=["*"],
+    max_age=3600,  # Cache preflight for 1 hour
 )
 
+# Root endpoint
 @app.get("/")
 def root():
     return {"message": "Enterprise AI Knowledge System API is running"}
 
+# Health check
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -37,4 +40,10 @@ app.include_router(chat_router, prefix="/chat", tags=["chat"])
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
+    uvicorn.run(
+        "main:app",  # Use string reference to avoid import issues
+        host="0.0.0.0",
+        port=port,
+        log_level="info",
+        reload=False,
+    )
