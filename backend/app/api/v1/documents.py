@@ -7,7 +7,7 @@ import logging
 
 from app.db.session import SessionLocal
 from app.clients.vector_client import VectorStore
-from app.clients.embed_client import EmbedClient  # ← NEW: Use same embedder as chat
+from app.clients.embed_client import EmbedClient  # Same embedder as chat
 
 import PyPDF2
 from docx import Document
@@ -19,7 +19,7 @@ from bs4 import BeautifulSoup
 router = APIRouter(tags=["documents"])
 
 # ==============================
-# VECTOR STORE (consistent collection name)
+# VECTOR STORE
 # ==============================
 vector_store = VectorStore(collection_name="enterprise_knowledge")
 
@@ -146,16 +146,15 @@ async def upload_document(
 
         text = extract_text_safe(tmp_path, file.filename)
         if not text or len(text) < 10:
-            raise HTTPException(status_code=400, detail="No meaningful text extracted")
+            raise HTTPException(status_code=400, detail="No meaningful text extracted from the document")
 
         chunks = smart_chunk_text(text)
 
         logger.info(f"Indexing {len(chunks)} chunks")
 
-        # ← FIXED: Use same EmbedClient as chat.py
+        # FIXED: EmbedClient.embed returns list of lists — no .tolist() needed
         embed_client = EmbedClient()
-        embeddings = embed_client.embed(chunks)
-        embeddings = [emb.tolist() for emb in embeddings]
+        embeddings = embed_client.embed(chunks)  # Already list of lists
 
         payloads = [
             {
