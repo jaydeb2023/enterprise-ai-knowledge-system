@@ -23,7 +23,7 @@ async def chat(req: ChatRequest):
         if not req.query or not req.query.strip():
             return {"answer": "Please enter a valid question."}
 
-        # 1️⃣ Embed the question (RUN IN THREADPOOL)
+        # 1️⃣ Embed the question
         embed_client = EmbedClient()
         embeddings = await run_in_threadpool(
             embed_client.embed,
@@ -31,30 +31,40 @@ async def chat(req: ChatRequest):
         )
         query_embedding = embeddings[0]
 
-        # 2️⃣ Vector search (RUN IN THREADPOOL)
+        # 2️⃣ Vector search
         vector_store = VectorStore(collection_name="enterprise_knowledge")
         results = await run_in_threadpool(
             vector_store.search,
             query_embedding,
-            5
+            10  # Increased to 10 for better chance with scanned PDFs
         )
 
         logger.info(f"Retrieved {len(results)} chunks for query: '{req.query}'")
 
         if not results:
             return {
-                "answer": "I couldn't find relevant information in the uploaded documents."
+                "answer": "I couldn't find any relevant information in the uploaded documents. "
+                          "The document may be scanned (image-based) with no extractable text."
             }
 
-        # 3️⃣ Build context
-        context = "\n\n".join(
-            hit.payload.get("text", "")
-            for hit in results
-            if isinstance(hit.payload, dict)
-        )
+        # 3️⃣ Build context (skip empty chunks)
+        context_parts = []
+        for hit in results:
+            if isinstance(hit.payload, dict):
+                text = hit.payload.get("text", "").strip()
+                if text:
+                    context_parts.append(text)
+
+        context = "\n\n".join(context_parts)
+
+        if not context.strip():
+            return {
+                "answer": "The uploaded document appears to be scanned (image-based). "
+                          "No readable text was found. Try uploading a searchable PDF."
+            }
 
         prompt = f"""You are a helpful assistant. Answer the question using ONLY the following context from uploaded documents.
-If the context does not contain the answer, say "I don't have that information in the documents."
+If the context does not contain enough information, say "I don't have enough information."
 
 Context:
 {context}
@@ -63,7 +73,7 @@ Question: {req.query}
 
 Answer:"""
 
-        # 4️⃣ LLM call (🔥 CRITICAL FIX 🔥)
+        # 4️⃣ LLM call
         llm_client = LLMClient()
         answer = await run_in_threadpool(
             llm_client.generate,
@@ -72,8 +82,9 @@ Answer:"""
 
         return {"answer": answer.strip() or "No answer generated."}
 
-    except Exception:
+    except Exception as e:
         logger.exception("Chat endpoint error")
         return {
-            "answer": "Temporary error. Please try again in a few seconds."
+            "answer": f"Error processing query: {str(e)}. "
+                      "This may be due to a scanned PDF with no extractable text."
         }
