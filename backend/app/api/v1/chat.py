@@ -1,9 +1,9 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
 import logging
+from fastapi.concurrency import run_in_threadpool
 
 router = APIRouter()
-
 logger = logging.getLogger(__name__)
 
 class ChatRequest(BaseModel):
@@ -13,7 +13,7 @@ class ChatRequest(BaseModel):
 async def chat_test():
     return {"status": "chat router loaded"}
 
-@router.post("")
+@router.post("/")
 async def chat(req: ChatRequest):
     try:
         from app.clients.embed_client import EmbedClient
@@ -23,30 +23,36 @@ async def chat(req: ChatRequest):
         if not req.query or not req.query.strip():
             return {"answer": "Please enter a valid question."}
 
-        # 1. Embed the question
+        # 1️⃣ Embed the question (RUN IN THREADPOOL)
         embed_client = EmbedClient()
-        query_embedding = embed_client.embed([req.query.strip()])[0]
+        embeddings = await run_in_threadpool(
+            embed_client.embed,
+            [req.query.strip()]
+        )
+        query_embedding = embeddings[0]
 
-        # 2. Search in Qdrant
+        # 2️⃣ Vector search (RUN IN THREADPOOL)
         vector_store = VectorStore(collection_name="documents")
-        results = vector_store.search(query_embedding, limit=5)
+        results = await run_in_threadpool(
+            vector_store.search,
+            query_embedding,
+            5
+        )
 
         logger.info(f"Retrieved {len(results)} chunks for query: '{req.query}'")
 
-        # 3. No relevant chunks found
-        if not results or len(results) == 0:
+        if not results:
             return {
-                "answer": "I couldn't find relevant information in the uploaded documents. "
-                          "Please make sure a document is uploaded and try a more specific question."
+                "answer": "I couldn't find relevant information in the uploaded documents."
             }
 
-        # 4. Build context from retrieved chunks
-        context = "\n\n".join([
-            hit.payload.get("text", "") if isinstance(hit.payload, dict) else ""
+        # 3️⃣ Build context
+        context = "\n\n".join(
+            hit.payload.get("text", "")
             for hit in results
-        ])
+            if isinstance(hit.payload, dict)
+        )
 
-        # 5. Strict RAG prompt
         prompt = f"""You are a helpful assistant. Answer the question using ONLY the following context from uploaded documents.
 If the context does not contain the answer, say "I don't have that information in the documents."
 
@@ -57,13 +63,16 @@ Question: {req.query}
 
 Answer:"""
 
-        # 6. Generate with Groq
+        # 4️⃣ LLM call (🔥 CRITICAL FIX 🔥)
         llm_client = LLMClient()
-        answer = llm_client.generate(prompt)
+        answer = await run_in_threadpool(
+            llm_client.generate,
+            prompt
+        )
 
         return {"answer": answer.strip() or "No answer generated."}
 
-    except Exception as e:
+    except Exception:
         logger.exception("Chat endpoint error")
         return {
             "answer": "Temporary error. Please try again in a few seconds."
