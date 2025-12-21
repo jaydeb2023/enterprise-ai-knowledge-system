@@ -4,7 +4,6 @@ from typing import List
 
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
-from qdrant_client.models import QueryPoints  # New import for modern search
 
 
 class VectorStore:
@@ -48,12 +47,12 @@ class VectorStore:
         )
 
     def search(self, query_vector: List[float], limit: int = 5):
-        """Modern search using query_points (replaces deprecated .search)"""
-        result = self.client.query_points(
+        """Stable search method compatible with latest qdrant-client"""
+        hits = self.client.search(
             collection_name=self.collection_name,
-            query=query_vector,
+            query_vector=query_vector,
             limit=limit,
-            with_payload=True,   # Crucial: get the text back
+            with_payload=True,   # Crucial: returns the text chunks
             with_vectors=False,
         )
-        return result.points  # List of ScoredPoint objects
+        return hits  # List of ScoredPoint objects
