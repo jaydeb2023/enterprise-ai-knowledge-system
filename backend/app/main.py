@@ -10,13 +10,14 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# CORS - allow all origins (production safe for demo)
+# CORS - MUST BE THE FIRST MIDDLEWARE
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # Allows all origins (Vercel, localhost, etc.)
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],  # Important for some browsers/platforms
 )
 
 @app.get("/")
