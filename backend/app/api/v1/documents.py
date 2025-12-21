@@ -7,12 +7,11 @@ import logging
 
 from app.db.session import SessionLocal
 from app.clients.vector_client import VectorStore
+from app.clients.embed_client import EmbedClient  # ← NEW: Use same embedder as chat
 
 import PyPDF2
 from docx import Document
-
-# FastEmbed
-from fastembed import TextEmbedding
+from bs4 import BeautifulSoup
 
 # ==============================
 # ROUTER
@@ -20,26 +19,9 @@ from fastembed import TextEmbedding
 router = APIRouter(tags=["documents"])
 
 # ==============================
-# VECTOR STORE
+# VECTOR STORE (consistent collection name)
 # ==============================
 vector_store = VectorStore(collection_name="enterprise_knowledge")
-
-# ==============================
-# EMBEDDING MODEL (lazy load)
-# ==============================
-_embedding_model = None
-
-def get_embedding_model():
-    global _embedding_model
-    if _embedding_model is None:
-        print("Loading FastEmbed model (first request may take 10-20s)...")
-        _embedding_model = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
-    return _embedding_model
-
-def embed_texts(texts: list[str]) -> list[list[float]]:
-    model = get_embedding_model()
-    embeddings = list(model.embed(texts))
-    return [e.tolist() for e in embeddings]
 
 # ==============================
 # CONFIG
@@ -86,7 +68,6 @@ def extract_text_safe(file_path: str, filename: str) -> str:
             return "\n".join(p.text for p in doc.paragraphs if p.text.strip()).strip()
 
         elif ext in [".html", ".htm"]:
-            from bs4 import BeautifulSoup
             with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                 soup = BeautifulSoup(f.read(), "html.parser")
                 return soup.get_text(separator="\n").strip()
@@ -117,14 +98,9 @@ async def options_upload():
     )
 
 # ==============================
-# SMART CHUNKING (CRITICAL FIX)
+# SMART CHUNKING
 # ==============================
 def smart_chunk_text(text: str) -> list[str]:
-    """
-    Semantic chunking:
-    - Groups related lines together
-    - Keeps invoice fields in same chunk
-    """
     lines = [l.strip() for l in text.splitlines() if l.strip()]
     chunks = []
     current = ""
@@ -139,7 +115,6 @@ def smart_chunk_text(text: str) -> list[str]:
     if current.strip():
         chunks.append(current.strip())
 
-    # remove duplicates just in case
     return list(dict.fromkeys(chunks))
 
 # ==============================
@@ -173,14 +148,14 @@ async def upload_document(
         if not text or len(text) < 10:
             raise HTTPException(status_code=400, detail="No meaningful text extracted")
 
-        # 🔥 FIXED CHUNKING
         chunks = smart_chunk_text(text)
 
         logger.info(f"Indexing {len(chunks)} chunks")
-        for c in chunks:
-            logger.info(f"CHUNK:\n{c}")
 
-        embeddings = embed_texts(chunks)
+        # ← FIXED: Use same EmbedClient as chat.py
+        embed_client = EmbedClient()
+        embeddings = embed_client.embed(chunks)
+        embeddings = [emb.tolist() for emb in embeddings]
 
         payloads = [
             {

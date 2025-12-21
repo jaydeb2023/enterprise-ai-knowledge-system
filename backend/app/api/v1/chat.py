@@ -32,7 +32,7 @@ async def chat(req: ChatRequest):
         query_embedding = embeddings[0]
 
         # 2️⃣ Vector search (RUN IN THREADPOOL)
-        vector_store = VectorStore(collection_name="documents")
+        vector_store = VectorStore(collection_name="enterprise_knowledge")
         results = await run_in_threadpool(
             vector_store.search,
             query_embedding,
