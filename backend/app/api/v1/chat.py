@@ -3,10 +3,12 @@ from pydantic import BaseModel
 import logging
 from fastapi.concurrency import run_in_threadpool
 
+# 🔥 ADD THESE IMPORTS (REQUIRED)
+from qdrant_client.models import Filter, FieldCondition, MatchValue
+
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-# 🔥 ADD document_id (ONLY CHANGE IN MODEL)
 class ChatRequest(BaseModel):
     query: str
     document_id: str
@@ -35,20 +37,23 @@ async def chat(req: ChatRequest):
         )
         query_embedding = embeddings[0]
 
-        # 2️⃣ Vector search (🔥 FILTER BY document_id)
+        # 🔥 BUILD PROPER QDRANT FILTER (THIS IS THE FIX)
+        document_filter = Filter(
+            must=[
+                FieldCondition(
+                    key="document_id",
+                    match=MatchValue(value=req.document_id)
+                )
+            ]
+        )
+
+        # 2️⃣ Vector search (FILTERED)
         vector_store = VectorStore(collection_name="enterprise_knowledge")
         results = await run_in_threadpool(
             vector_store.search,
             query_embedding,
             10,
-            {
-                "must": [
-                    {
-                        "key": "document_id",
-                        "match": {"value": req.document_id}
-                    }
-                ]
-            }
+            document_filter
         )
 
         logger.info(
@@ -59,8 +64,7 @@ async def chat(req: ChatRequest):
 
         if not results:
             return {
-                "answer": "I couldn't find any relevant information in the uploaded document. "
-                          "The document may be scanned (image-based) with no extractable text."
+                "answer": "I couldn't find any relevant information in the uploaded document."
             }
 
         # 3️⃣ Build context (unchanged)
@@ -75,8 +79,7 @@ async def chat(req: ChatRequest):
 
         if not context.strip():
             return {
-                "answer": "The uploaded document appears to be scanned (image-based). "
-                          "No readable text was found. Try uploading a searchable PDF."
+                "answer": "I don't have enough information in the document."
             }
 
         prompt = f"""You are a helpful assistant. Answer the question using ONLY the following context from uploaded documents.
@@ -101,6 +104,5 @@ Answer:"""
     except Exception as e:
         logger.exception("Chat endpoint error")
         return {
-            "answer": f"Error processing query: {str(e)}. "
-                      "This may be due to a scanned PDF with no extractable text."
+            "answer": f"Error processing query: {str(e)}"
         }
