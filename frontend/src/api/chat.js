@@ -12,12 +12,23 @@ export async function askAI(question) {
     throw new Error("Please enter a question");
   }
 
+  // 🔥 GET latest document_id
+  const documentId = localStorage.getItem("latest_document_id");
+
+  if (!documentId) {
+    throw new Error("No document uploaded yet. Please upload a document first.");
+  }
+
   const response = await fetch(`${API_BASE}/chat`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ query: question.trim() }),
+    // 🔥 SEND document_id TO BACKEND
+    body: JSON.stringify({
+      query: question.trim(),
+      document_id: documentId,
+    }),
   });
 
   if (!response.ok) {
