@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 import tempfile
 import os
 import logging
+import uuid
 
 from app.db.session import SessionLocal
 from app.clients.vector_client import VectorStore
@@ -140,6 +141,9 @@ async def upload_document(
     tmp_path = None
 
     try:
+        # ✅ Generate document_id PER UPLOAD (FIX)
+        document_id = str(uuid.uuid4())
+
         with tempfile.NamedTemporaryFile(delete=False, suffix=ext, dir="/tmp") as tmp:
             tmp.write(content)
             tmp_path = tmp.name
@@ -152,14 +156,14 @@ async def upload_document(
 
         logger.info(f"Indexing {len(chunks)} chunks")
 
-        # FIXED: EmbedClient.embed returns list of lists — no .tolist() needed
         embed_client = EmbedClient()
-        embeddings = embed_client.embed(chunks)  # Already list of lists
+        embeddings = embed_client.embed(chunks)
 
         payloads = [
             {
                 "text": chunk,
                 "filename": file.filename,
+                "document_id": document_id,   # ✅ ADD ONLY THIS FIELD
                 "chunk_index": i,
             }
             for i, chunk in enumerate(chunks)
@@ -172,6 +176,7 @@ async def upload_document(
             content={
                 "message": "Document uploaded and indexed successfully",
                 "filename": file.filename,
+                "document_id": document_id,   # ✅ RETURN IT
                 "chunks_stored": len(chunks),
             },
         )
