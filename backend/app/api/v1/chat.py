@@ -6,12 +6,16 @@ from fastapi.concurrency import run_in_threadpool
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+# 🔥 ADD document_id (ONLY CHANGE IN MODEL)
 class ChatRequest(BaseModel):
     query: str
+    document_id: str
+
 
 @router.get("/test")
 async def chat_test():
     return {"status": "chat router loaded"}
+
 
 @router.post("/")
 async def chat(req: ChatRequest):
@@ -31,23 +35,35 @@ async def chat(req: ChatRequest):
         )
         query_embedding = embeddings[0]
 
-        # 2️⃣ Vector search
+        # 2️⃣ Vector search (🔥 FILTER BY document_id)
         vector_store = VectorStore(collection_name="enterprise_knowledge")
         results = await run_in_threadpool(
             vector_store.search,
             query_embedding,
-            10  # Increased to 10 for better chance with scanned PDFs
+            10,
+            {
+                "must": [
+                    {
+                        "key": "document_id",
+                        "match": {"value": req.document_id}
+                    }
+                ]
+            }
         )
 
-        logger.info(f"Retrieved {len(results)} chunks for query: '{req.query}'")
+        logger.info(
+            f"Retrieved {len(results)} chunks "
+            f"for query='{req.query}' "
+            f"document_id='{req.document_id}'"
+        )
 
         if not results:
             return {
-                "answer": "I couldn't find any relevant information in the uploaded documents. "
+                "answer": "I couldn't find any relevant information in the uploaded document. "
                           "The document may be scanned (image-based) with no extractable text."
             }
 
-        # 3️⃣ Build context (skip empty chunks)
+        # 3️⃣ Build context (unchanged)
         context_parts = []
         for hit in results:
             if isinstance(hit.payload, dict):
@@ -73,7 +89,7 @@ Question: {req.query}
 
 Answer:"""
 
-        # 4️⃣ LLM call
+        # 4️⃣ LLM call (unchanged)
         llm_client = LLMClient()
         answer = await run_in_threadpool(
             llm_client.generate,
