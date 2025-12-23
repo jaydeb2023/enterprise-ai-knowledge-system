@@ -10,7 +10,13 @@ export default function UploadBox() {
     const selectedFile = e.target.files?.[0];
     setFile(selectedFile);
     if (selectedFile) {
-      setStatus(`Selected: ${selectedFile.name} (${(selectedFile.size / 1024 / 1024).toFixed(2)} MB)`);
+      setStatus(
+        `Selected: ${selectedFile.name} (${(
+          selectedFile.size /
+          1024 /
+          1024
+        ).toFixed(2)} MB)`
+      );
     } else {
       setStatus("");
     }
@@ -26,10 +32,16 @@ export default function UploadBox() {
     setStatus("⏳ Uploading and processing document...");
 
     try {
-      await uploadDocument(file);
+      // 🔥 CAPTURE RESPONSE
+      const res = await uploadDocument(file);
+
+      // 🔥 STORE document_id (CRITICAL)
+      if (res?.document_id) {
+        localStorage.setItem("latest_document_id", res.document_id);
+      }
+
       setStatus("✅ Document uploaded and indexed successfully!");
-      setFile(null); // Clear input
-      // Optionally reset file input visually
+      setFile(null);
       document.querySelector('input[type="file"]').value = "";
     } catch (err) {
       console.error("Upload error:", err);
