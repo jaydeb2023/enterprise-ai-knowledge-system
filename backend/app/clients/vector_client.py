@@ -1,9 +1,14 @@
 import os
 import uuid
-from typing import List
+from typing import List, Optional
 
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
+from qdrant_client.models import (
+    Distance,
+    VectorParams,
+    PointStruct,
+    Filter,
+)
 
 class VectorStore:
     def __init__(self, collection_name: str = "documents"):
@@ -48,16 +53,22 @@ class VectorStore:
             points=points,
         )
 
-    def search(self, query_vector: List[float], limit: int = 5):
+    # 🔥 UPDATED: accept optional filter
+    def search(
+        self,
+        query_vector: List[float],
+        limit: int = 5,
+        query_filter: Optional[Filter] = None,
+    ):
         try:
-            # FIXED: Use the correct search method for qdrant-client 1.16+
             search_result = self.client.query_points(
                 collection_name=self.collection_name,
                 query=query_vector,
                 limit=limit,
                 with_payload=True,
+                query_filter=query_filter,   # ✅ THIS IS THE FIX
             )
-            return search_result.points  # Return points instead of hits
+            return search_result.points
         except Exception as e:
             print(f"Search error: {e}")
             return []
