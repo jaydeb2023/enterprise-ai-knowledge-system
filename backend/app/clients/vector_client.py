@@ -8,6 +8,7 @@ from qdrant_client.models import (
     VectorParams,
     PointStruct,
     Filter,
+    PayloadSchemaType,   # 🔥 ADD
 )
 
 class VectorStore:
@@ -35,6 +36,18 @@ class VectorStore:
                         distance=Distance.COSINE,
                     ),
                 )
+
+            # 🔥 ADD PAYLOAD INDEX FOR document_id (CRITICAL FIX)
+            try:
+                self.client.create_payload_index(
+                    collection_name=self.collection_name,
+                    field_name="document_id",
+                    field_schema=PayloadSchemaType.KEYWORD,
+                )
+            except Exception as e:
+                # Index may already exist — safe to ignore
+                print(f"Payload index creation skipped: {e}")
+
         except Exception as e:
             print(f"Collection init error: {e}")
 
@@ -53,7 +66,6 @@ class VectorStore:
             points=points,
         )
 
-    # 🔥 UPDATED: accept optional filter
     def search(
         self,
         query_vector: List[float],
@@ -66,7 +78,7 @@ class VectorStore:
                 query=query_vector,
                 limit=limit,
                 with_payload=True,
-                query_filter=query_filter,   # ✅ THIS IS THE FIX
+                query_filter=query_filter,
             )
             return search_result.points
         except Exception as e:
